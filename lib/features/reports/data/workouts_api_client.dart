@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -85,6 +86,34 @@ class WorkoutsApiClient {
     return _sessionFromReportJson(decoded, fallback: session);
   }
 
+  Future<LiveSession> updateCoachComment({
+    required LiveSession session,
+    required int note,
+    required String pointsForts,
+    required String pointsAmeliorer,
+    required String commentaire,
+  }) async {
+    final reportId = session.reportId;
+    if (reportId == null || reportId.isEmpty) {
+      throw const WorkoutsApiException('Rapport introuvable pour cette seance.');
+    }
+
+    final response = await _send(
+      method: 'PATCH',
+      path: '${ApiConstants.reports}/$reportId/comment',
+      body: {
+        'note': note,
+        'pointsForts': pointsForts,
+        'pointsAmeliorer': pointsAmeliorer,
+        'commentaire': commentaire,
+      },
+    );
+    final decoded = jsonDecode(response.body);
+
+    if (decoded is! Map<String, dynamic>) return session;
+    return _sessionFromReportJson(decoded, fallback: session);
+  }
+
   LiveSession _sessionFromJson(Map<String, dynamic> json) {
     final horseJson = _asMap(json['horse']);
     final riderJson = _asMap(json['rider']);
@@ -127,6 +156,7 @@ class WorkoutsApiClient {
     final riderCommentJson = _asMap(json['riderComment']);
 
     return LiveSession(
+      reportId: json['id']?.toString() ?? fallback.reportId,
       workoutId: json['workoutId']?.toString() ?? fallback.workoutId,
       horse: horseJson.isEmpty ? fallback.horse : _horseFromJson(horseJson),
       rider: riderJson.isEmpty ? fallback.rider : _riderFromJson(riderJson),
@@ -142,6 +172,10 @@ class WorkoutsApiClient {
       averageSpeedKmh: averageSpeedKmh,
       maxSpeedKmh: maxSpeedKmh,
       gaitAnalysis: _gaitAnalysisFromJson(json['gaitAnalysis']),
+      speedByKilometer: _speedByKilometerFromJson(
+        json['speedByKilometer'],
+        fallback: fallback,
+      ),
       coachComment: coachJson.isEmpty
           ? fallback.coachComment
           : _coachCommentFromJson(coachJson),
@@ -189,6 +223,41 @@ class WorkoutsApiClient {
     }).toList();
   }
 
+  List<SpeedPoint> _speedByKilometerFromJson(
+    dynamic value, {
+    required LiveSession fallback,
+  }) {
+    if (value is List) {
+      final points = value.whereType<Map<String, dynamic>>().map((json) {
+        return SpeedPoint(
+          kilometer: _asInt(json['kilometer']),
+          speedKmh: _asDouble(json['speedKmh']),
+        );
+      }).where((point) => point.kilometer > 0 && point.speedKmh > 0).toList();
+
+      if (points.isNotEmpty) return points;
+    }
+
+    return _estimatedSpeedPoints(fallback);
+  }
+
+  List<SpeedPoint> _estimatedSpeedPoints(LiveSession session) {
+    final distance = (session.distanceKm ?? 0).round();
+    final count = distance <= 0 ? 1 : distance;
+    final average = session.averageSpeedKmh ?? 0;
+    final max = session.maxSpeedKmh ?? average;
+
+    return List.generate(count, (index) {
+      final progress = count == 1 ? 0.0 : index / (count - 1);
+      final wave = math.sin(progress * math.pi);
+
+      return SpeedPoint(
+        kilometer: index + 1,
+        speedKmh: average + (max - average) * wave * 0.72,
+      );
+    });
+  }
+
   CoachCommentInfo _coachCommentFromJson(Map<String, dynamic> json) {
     final coachJson = _asMap(json['coach']);
     return CoachCommentInfo(
@@ -203,6 +272,7 @@ class WorkoutsApiClient {
   Future<http.Response> _send({
     required String method,
     required String path,
+    Map<String, dynamic>? body,
   }) async {
     final token = AuthSessionStore.accessToken;
     if (token == null || token.isEmpty) {
@@ -211,14 +281,19 @@ class WorkoutsApiClient {
 
     final uri = Uri.parse('${ApiConstants.baseUrl}$path');
     final headers = {
+      'Content-Type': 'application/json',
       'Accept': 'application/json',
       'Authorization': 'Bearer $token',
     };
 
     try {
-      final response = await _client
-          .get(uri, headers: headers)
-          .timeout(const Duration(seconds: 15));
+      final response = method == 'PATCH'
+          ? await _client
+                .patch(uri, headers: headers, body: jsonEncode(body ?? {}))
+                .timeout(const Duration(seconds: 15))
+          : await _client
+                .get(uri, headers: headers)
+                .timeout(const Duration(seconds: 15));
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw WorkoutsApiException(_errorMessage(response.body));

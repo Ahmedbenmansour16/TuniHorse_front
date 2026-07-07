@@ -65,6 +65,7 @@ class _CoursesListPageState extends State<CoursesListPage> {
 
     return CourseInfo(
       id: json['id']?.toString() ?? json['_id']?.toString(),
+      dateCourse: dateCourse,
       name: json['nom']?.toString() ?? 'Course',
       category: json['categorie']?.toString() ?? 'Endurance',
       date: dateText == null || dateText.isEmpty

@@ -55,6 +55,17 @@ class AuthApiClient {
     });
   }
 
+  Future<Map<String, dynamic>> getMe(String accessToken) {
+    return _authorizedJsonGet(ApiConstants.me, accessToken);
+  }
+
+  Future<Map<String, dynamic>> updateMe({
+    required String accessToken,
+    required Map<String, dynamic> body,
+  }) {
+    return _authorizedJsonPatch(ApiConstants.usersMe, accessToken, body);
+  }
+
   Future<AuthSession> _post(String path, Map<String, dynamic> body) async {
     final uri = Uri.parse('${ApiConstants.baseUrl}$path');
 
@@ -165,6 +176,72 @@ class AuthApiClient {
     } catch (_) {
       return {};
     }
+  }
+
+  Future<Map<String, dynamic>> _authorizedJsonGet(
+    String path,
+    String accessToken,
+  ) async {
+    final response = await _authorizedRequest(
+      method: 'GET',
+      path: path,
+      accessToken: accessToken,
+    );
+    return _decode(response.body);
+  }
+
+  Future<Map<String, dynamic>> _authorizedJsonPatch(
+    String path,
+    String accessToken,
+    Map<String, dynamic> body,
+  ) async {
+    final response = await _authorizedRequest(
+      method: 'PATCH',
+      path: path,
+      accessToken: accessToken,
+      body: body,
+    );
+    return _decode(response.body);
+  }
+
+  Future<http.Response> _authorizedRequest({
+    required String method,
+    required String path,
+    required String accessToken,
+    Map<String, dynamic>? body,
+  }) async {
+    final uri = Uri.parse('${ApiConstants.baseUrl}$path');
+    final headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': 'Bearer $accessToken',
+    };
+
+    http.Response response;
+
+    try {
+      if (method == 'PATCH') {
+        response = await _client
+            .patch(uri, headers: headers, body: jsonEncode(body ?? {}))
+            .timeout(const Duration(seconds: 15));
+      } else {
+        response = await _client
+            .get(uri, headers: headers)
+            .timeout(const Duration(seconds: 15));
+      }
+    } on TimeoutException {
+      throw const AuthApiException('Le serveur ne repond pas.');
+    } catch (error) {
+      throw AuthApiException('Impossible de contacter le serveur. Detail: $error');
+    }
+
+    final decoded = _decode(response.body);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AuthApiException(_errorMessage(decoded));
+    }
+
+    return response;
   }
 
   String _errorMessage(Map<String, dynamic> decoded) {

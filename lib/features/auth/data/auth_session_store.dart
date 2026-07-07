@@ -11,6 +11,17 @@ class AuthSessionStore {
     _session = session;
   }
 
+  static void updateUser(Map<String, dynamic> user) {
+    final current = _session;
+    if (current == null) return;
+
+    _session = AuthSession(
+      accessToken: current.accessToken,
+      role: user['role']?.toString() ?? current.role,
+      user: user,
+    );
+  }
+
   static void clear() {
     _session = null;
   }

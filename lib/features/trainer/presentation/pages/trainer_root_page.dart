@@ -19,7 +19,7 @@ class _TrainerRootPageState extends State<TrainerRootPage> {
   Widget build(BuildContext context) {
     final pages = [
       const TrainerHomePage(),
-      const TeamDetailsPage(),
+      const TeamDetailsPage(inShell: true),
       const LiveSessionsPage(inShell: true),
       const CoursesListPage(inShell: true),
       const TrainerProfilePage(),

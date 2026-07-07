@@ -55,6 +55,7 @@ class Horse {
 }
 
 class LiveSession {
+  final String? reportId;
   final String? workoutId;
   final Horse horse;
   final Rider rider;
@@ -70,10 +71,12 @@ class LiveSession {
   final double? averageSpeedKmh;
   final double? maxSpeedKmh;
   final List<GaitStat> gaitAnalysis;
+  final List<SpeedPoint> speedByKilometer;
   final CoachCommentInfo? coachComment;
   final String? riderComment;
 
   const LiveSession({
+    this.reportId,
     this.workoutId,
     required this.horse,
     required this.rider,
@@ -89,6 +92,7 @@ class LiveSession {
     this.averageSpeedKmh,
     this.maxSpeedKmh,
     this.gaitAnalysis = const [],
+    this.speedByKilometer = const [],
     this.coachComment,
     this.riderComment,
   });
@@ -106,6 +110,13 @@ class GaitStat {
     required this.distanceKm,
     required this.percentage,
   });
+}
+
+class SpeedPoint {
+  final int kilometer;
+  final double speedKmh;
+
+  const SpeedPoint({required this.kilometer, required this.speedKmh});
 }
 
 class CoachCommentInfo {
@@ -126,6 +137,7 @@ class CoachCommentInfo {
 
 class CourseInfo {
   final String? id;
+  final DateTime? dateCourse;
   final String name;
   final String category;
   final String date;
@@ -136,6 +148,7 @@ class CourseInfo {
 
   const CourseInfo({
     this.id,
+    this.dateCourse,
     required this.name,
     required this.category,
     required this.date,

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:tunihorse/core/constants/app_colors.dart';
-import 'package:tunihorse/core/data/mock_data.dart';
 import 'package:tunihorse/core/models/ui_models.dart';
 import 'package:tunihorse/core/widgets/app_page.dart';
 import 'package:tunihorse/core/widgets/ui_components.dart';
 import 'package:tunihorse/features/courses/data/courses_api_client.dart';
 import 'package:tunihorse/features/courses/presentation/pages/course_details_page.dart';
 import 'package:tunihorse/features/courses/presentation/pages/courses_list_page.dart';
+import 'package:tunihorse/features/auth/data/auth_session_store.dart';
+import 'package:tunihorse/features/health/data/health_api_client.dart';
 import 'package:tunihorse/features/health/presentation/pages/horse_health_page.dart';
 import 'package:tunihorse/features/notifications/presentation/pages/notifications_page.dart';
 import 'package:tunihorse/features/reports/data/workouts_api_client.dart';
@@ -19,8 +20,12 @@ class RiderHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fullName =
+        AuthSessionStore.session?.user?['nomComplet']?.toString() ?? 'Cavalier';
+    final firstName = fullName.trim().split(' ').first;
+
     return ShellPage(
-      title: 'Bonjour Ahmed',
+      title: 'Bonjour $firstName',
       subtitle: 'Pret pour une nouvelle seance ?',
       actions: [
         IconButton(
@@ -75,44 +80,7 @@ class RiderHomePage extends StatelessWidget {
         ),
         const SectionHeader('Statistiques ce mois'),
         const _MonthStatsSection(),
-        SectionHeader(
-          'Prochain rappel sante',
-          action: 'Voir',
-          onAction: () =>
-              openPage(context, HorseHealthPage(horse: horses.first)),
-        ),
-        TuniCard(
-          onTap: () => openPage(context, HorseHealthPage(horse: horses.first)),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.event_note_outlined,
-                color: AppColors.danger,
-                size: 34,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Vaccin grippe equine',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    Text(
-                      'Dans 3 jours - ${horses.first.name}',
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right, color: AppColors.muted),
-            ],
-          ),
-        ),
+        const _NextHealthReminderSection(),
         const _NextCourseSection(),
         SectionHeader(
           'Derniers entrainements',
@@ -191,6 +159,160 @@ class _MonthStatsSectionState extends State<_MonthStatsSection> {
     }
 
     return MetricGrid(stats: _stats.toTrainerStats());
+  }
+}
+
+class _NextHealthReminderSection extends StatefulWidget {
+  const _NextHealthReminderSection();
+
+  @override
+  State<_NextHealthReminderSection> createState() =>
+      _NextHealthReminderSectionState();
+}
+
+class _NextHealthReminderSectionState
+    extends State<_NextHealthReminderSection> {
+  final _healthApiClient = HealthApiClient();
+
+  bool _isLoading = true;
+  String? _error;
+  NextHealthReminder? _reminder;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReminder();
+  }
+
+  @override
+  void dispose() {
+    _healthApiClient.close();
+    super.dispose();
+  }
+
+  Future<void> _loadReminder() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final reminder = await _healthApiClient.getNextReminder();
+      if (!mounted) return;
+      setState(() => _reminder = reminder);
+    } on HealthApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Impossible de charger le rappel sante.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reminder = _reminder;
+
+    return Column(
+      children: [
+        SectionHeader(
+          'Prochain rappel sante',
+          action: reminder == null ? null : 'Voir',
+          onAction: reminder == null
+              ? null
+              : () => openPage(
+                    context,
+                    HorseHealthPage(horse: reminder.horse),
+                  ),
+        ),
+        _buildContent(context, reminder),
+      ],
+    );
+  }
+
+  Widget _buildContent(BuildContext context, NextHealthReminder? reminder) {
+    if (_isLoading) {
+      return const TuniCard(child: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_error != null) {
+      return TuniCard(
+        child: Column(
+          children: [
+            Text(_error!, textAlign: TextAlign.center),
+            const SizedBox(height: 10),
+            SecondaryButton(label: 'Reessayer', onPressed: _loadReminder),
+          ],
+        ),
+      );
+    }
+
+    if (reminder == null) {
+      return const TuniCard(
+        child: Row(
+          children: [
+            Icon(Icons.event_note_outlined, color: AppColors.muted, size: 32),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Aucun rappel sante a venir',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return TuniCard(
+      onTap: () => openPage(context, HorseHealthPage(horse: reminder.horse)),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.event_note_outlined,
+            color: AppColors.danger,
+            size: 34,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  reminder.careTypeLabel,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                Text(
+                  '${_durationLabel(reminder.reminderDate)} - ${reminder.horse.name}',
+                  style: const TextStyle(
+                    color: AppColors.muted,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right, color: AppColors.muted),
+        ],
+      ),
+    );
+  }
+
+  String _durationLabel(DateTime reminderDate) {
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final reminderOnly = DateTime(
+      reminderDate.year,
+      reminderDate.month,
+      reminderDate.day,
+    );
+    final days = reminderOnly.difference(todayOnly).inDays;
+
+    if (days == 0) return 'Aujourd hui';
+    if (days == 1) return 'Demain';
+    return 'Dans $days jours';
   }
 }
 
@@ -368,6 +490,7 @@ class _NextCourseSectionState extends State<_NextCourseSection> {
       date: dateCourse,
       course: CourseInfo(
         id: json['id']?.toString() ?? json['_id']?.toString(),
+        dateCourse: dateCourse,
         name: json['nom']?.toString() ?? 'Course',
         category: json['categorie']?.toString() ?? 'Endurance',
         date: dateText == null || dateText.isEmpty

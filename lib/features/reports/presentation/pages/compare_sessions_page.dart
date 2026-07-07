@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:tunihorse/core/data/mock_data.dart';
 import 'package:tunihorse/core/models/ui_models.dart';
 import 'package:tunihorse/core/widgets/app_page.dart';
 import 'package:tunihorse/core/widgets/ui_components.dart';
@@ -28,8 +27,11 @@ class _CompareSessionsPageState extends State<CompareSessionsPage> {
   bool _isLoading = false;
   String? _error;
 
-  List<LiveSession> get _sessions =>
-      _loadedSessions.isEmpty ? liveSessions : _loadedSessions;
+  List<LiveSession> get _sessions {
+    if (_loadedSessions.isNotEmpty) return _loadedSessions;
+    final base = widget.baseSession;
+    return base == null ? [] : [base];
+  }
 
   @override
   void initState() {
@@ -97,8 +99,6 @@ class _CompareSessionsPageState extends State<CompareSessionsPage> {
   @override
   Widget build(BuildContext context) {
     final sessions = _sessions;
-    final first = sessions[_firstIndex];
-    final second = sessions[_secondIndex];
 
     return AppPage(
       title: 'Comparer seances',
@@ -108,6 +108,46 @@ class _CompareSessionsPageState extends State<CompareSessionsPage> {
           const TuniCard(child: Center(child: CircularProgressIndicator())),
         if (_error != null)
           TuniCard(child: Text(_error!, textAlign: TextAlign.center)),
+        if (sessions.isEmpty)
+          const TuniCard(
+            child: Text(
+              'Aucune seance disponible pour la comparaison.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+          )
+        else
+          _CompareContent(
+            sessions: sessions,
+            firstIndex: _firstIndex.clamp(0, sessions.length - 1).toInt(),
+            secondIndex: _secondIndex.clamp(0, sessions.length - 1).toInt(),
+            onSecondChanged: (index) => setState(() => _secondIndex = index),
+          ),
+      ],
+    );
+  }
+}
+
+class _CompareContent extends StatelessWidget {
+  final List<LiveSession> sessions;
+  final int firstIndex;
+  final int secondIndex;
+  final ValueChanged<int> onSecondChanged;
+
+  const _CompareContent({
+    required this.sessions,
+    required this.firstIndex,
+    required this.secondIndex,
+    required this.onSecondChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final first = sessions[firstIndex];
+    final second = sessions[secondIndex];
+
+    return Column(
+      children: [
         Row(
           children: [
             Expanded(
@@ -118,8 +158,8 @@ class _CompareSessionsPageState extends State<CompareSessionsPage> {
               child: _SessionSelectorCard(
                 title: 'Seance B',
                 sessions: sessions,
-                selectedIndex: _secondIndex,
-                onChanged: (index) => setState(() => _secondIndex = index),
+                selectedIndex: secondIndex,
+                onChanged: onSecondChanged,
               ),
             ),
           ],

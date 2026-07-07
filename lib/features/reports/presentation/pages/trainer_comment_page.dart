@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:tunihorse/core/constants/app_colors.dart';
-import 'package:tunihorse/core/data/mock_data.dart';
 import 'package:tunihorse/core/models/ui_models.dart';
 import 'package:tunihorse/core/widgets/app_page.dart';
 import 'package:tunihorse/core/widgets/ui_components.dart';
@@ -13,6 +12,7 @@ class TrainerCommentPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final coachComment = session?.coachComment;
+    final coachName = coachComment?.coachName ?? 'Coach';
 
     return AppPage(
       title: 'Commentaire coach',
@@ -21,18 +21,18 @@ class TrainerCommentPage extends StatelessWidget {
         TuniCard(
           child: Row(
             children: [
-              RiderAvatar(rider: riders.first),
+              _CoachAvatar(name: coachName),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      coachComment?.coachName ?? 'Coach',
+                      coachName,
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
                     const Text(
-                      'Entraineur - Ecurie des Bois',
+                      'Entraineur',
                       style: TextStyle(color: AppColors.muted, fontSize: 12),
                     ),
                   ],
@@ -103,6 +103,35 @@ class TrainerCommentPage extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _CoachAvatar extends StatelessWidget {
+  final String name;
+
+  const _CoachAvatar({required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = name
+        .split(' ')
+        .where((part) => part.trim().isNotEmpty)
+        .map((part) => part.trim()[0])
+        .take(2)
+        .join()
+        .toUpperCase();
+
+    return CircleAvatar(
+      radius: 24,
+      backgroundColor: AppColors.greenSoft,
+      child: Text(
+        initials.isEmpty ? 'C' : initials,
+        style: const TextStyle(
+          color: AppColors.green,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
     );
   }
 }

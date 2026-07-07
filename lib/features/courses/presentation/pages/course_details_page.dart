@@ -11,8 +11,47 @@ class CourseDetailsPage extends StatelessWidget {
 
   const CourseDetailsPage({super.key, required this.course});
 
+  bool get _isPassed {
+    final date = course.dateCourse;
+    if (date == null) {
+      return course.countdown.toLowerCase().contains('passe');
+    }
+
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final courseDay = DateTime(date.year, date.month, date.day);
+    return courseDay.isBefore(todayOnly);
+  }
+
+  List<_CountdownUnitData> get _countdownUnits {
+    final date = course.dateCourse;
+    if (date == null) {
+      return [_CountdownUnitData(course.countdown, 'restant')];
+    }
+
+    final target = DateTime(date.year, date.month, date.day, 23, 59);
+    final remaining = target.difference(DateTime.now());
+    if (remaining.isNegative) {
+      return const [_CountdownUnitData('0', 'jour')];
+    }
+
+    return [
+      _CountdownUnitData(remaining.inDays.toString().padLeft(2, '0'), 'jours'),
+      _CountdownUnitData(
+        remaining.inHours.remainder(24).toString().padLeft(2, '0'),
+        'heures',
+      ),
+      _CountdownUnitData(
+        remaining.inMinutes.remainder(60).toString().padLeft(2, '0'),
+        'minutes',
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isPassed = _isPassed;
+
     return AppPage(
       title: 'Détail course',
       showBack: true,
@@ -59,7 +98,7 @@ class CourseDetailsPage extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const StatusPill('Active'),
+                  StatusPill(isPassed ? 'Passee' : 'Active'),
                 ],
               ),
               const SizedBox(height: 16),
@@ -94,59 +133,85 @@ class CourseDetailsPage extends StatelessWidget {
         ),
         SectionHeader(
           'Countdown',
-          action: 'Voir',
-          onAction: () =>
-              openPage(context, CourseCountdownPage(course: course)),
+          action: isPassed ? null : 'Voir',
+          onAction: isPassed
+              ? null
+              : () => openPage(context, CourseCountdownPage(course: course)),
         ),
-        const TuniCard(
-          child: Row(
-            children: [
-              Expanded(
-                child: _CountdownUnit(value: '05', label: 'jours'),
-              ),
-              Expanded(
-                child: _CountdownUnit(value: '12', label: 'heures'),
-              ),
-              Expanded(
-                child: _CountdownUnit(value: '35', label: 'minutes'),
-              ),
-            ],
-          ),
-        ),
-        const SectionHeader("Sélection de l'équipe"),
-        TuniCard(
-          child: Row(
-            children: [
-              RiderAvatar(rider: riders.first),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Camille Martin + Éclipse',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    Text(
-                      'Sélection active',
-                      style: TextStyle(color: Color(0xFF777B72), fontSize: 12),
-                    ),
-                  ],
+        if (isPassed)
+          const TuniCard(
+            child: Row(
+              children: [
+                Icon(Icons.history, color: Color(0xFF777B72)),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Cette course est deja passee.',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
                 ),
-              ),
-              const StatusPill('Active'),
-            ],
+              ],
+            ),
+          )
+        else
+          TuniCard(
+            child: Row(
+              children: _countdownUnits
+                  .map(
+                    (unit) => Expanded(
+                      child: _CountdownUnit(
+                        value: unit.value,
+                        label: unit.label,
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
           ),
-        ),
-        const SizedBox(height: 14),
-        PrimaryButton(
-          label: 'Associer cavalier + cheval',
-          onPressed: () =>
-              openPage(context, CourseSelectionPage(course: course)),
-        ),
+        if (!isPassed) ...[
+          const SectionHeader("Sélection de l'équipe"),
+          TuniCard(
+            child: Row(
+              children: [
+                RiderAvatar(rider: riders.first),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Camille Martin + Éclipse',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      Text(
+                        'Sélection active',
+                        style:
+                            TextStyle(color: Color(0xFF777B72), fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                const StatusPill('Active'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          PrimaryButton(
+            label: 'Associer cavalier + cheval',
+            onPressed: () =>
+                openPage(context, CourseSelectionPage(course: course)),
+          ),
+        ],
       ],
     );
   }
+}
+
+class _CountdownUnitData {
+  final String value;
+  final String label;
+
+  const _CountdownUnitData(this.value, this.label);
 }
 
 class _CountdownUnit extends StatelessWidget {

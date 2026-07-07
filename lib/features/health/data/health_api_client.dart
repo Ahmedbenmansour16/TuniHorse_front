@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:tunihorse/core/constants/api_constants.dart';
+import 'package:tunihorse/core/constants/app_colors.dart';
+import 'package:tunihorse/core/models/ui_models.dart';
 import 'package:tunihorse/features/auth/data/auth_session_store.dart';
 
 class HealthApiException implements Exception {
@@ -70,6 +72,49 @@ class HealthRecordItem {
   }
 }
 
+class NextHealthReminder {
+  final String id;
+  final String careTypeLabel;
+  final DateTime reminderDate;
+  final Horse horse;
+
+  const NextHealthReminder({
+    required this.id,
+    required this.careTypeLabel,
+    required this.reminderDate,
+    required this.horse,
+  });
+
+  factory NextHealthReminder.fromJson(Map<String, dynamic> json) {
+    final horseJson = json['horse'] is Map<String, dynamic>
+        ? json['horse'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    final photoUrl = horseJson['photoUrl']?.toString();
+
+    return NextHealthReminder(
+      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+      careTypeLabel: json['careTypeLabel']?.toString() ?? 'Rappel sante',
+      reminderDate:
+          DateTime.tryParse(json['reminderDate']?.toString() ?? '') ??
+          DateTime.now(),
+      horse: Horse(
+        id: horseJson['id']?.toString() ?? horseJson['_id']?.toString(),
+        name: horseJson['nom']?.toString() ?? 'Cheval',
+        race: horseJson['race']?.toString() ?? 'Race non precisee',
+        age: horseJson['age'] == null ? '--' : '${horseJson['age']} ans',
+        owner: '',
+        status: 'Actif',
+        color: AppColors.green,
+        photoUrl: photoUrl == null || photoUrl.isEmpty
+            ? null
+            : (photoUrl.startsWith('http')
+                  ? photoUrl
+                  : '${ApiConstants.baseUrl}$photoUrl'),
+      ),
+    );
+  }
+}
+
 class HealthApiClient {
   final http.Client _client;
 
@@ -86,6 +131,38 @@ class HealthApiClient {
       return decoded
           .whereType<Map<String, dynamic>>()
           .map(HealthCareTypeOption.fromJson)
+          .toList();
+    }
+
+    return [];
+  }
+
+  Future<NextHealthReminder?> getNextReminder() async {
+    final response = await _send(
+      method: 'GET',
+      path: '${ApiConstants.health}/reminders/next',
+    );
+    final decoded = jsonDecode(response.body);
+
+    if (decoded is Map<String, dynamic>) {
+      return NextHealthReminder.fromJson(decoded);
+    }
+
+    return null;
+  }
+
+  Future<List<NextHealthReminder>> getUpcomingReminders({int? limit}) async {
+    final query = limit == null ? '' : '?limit=$limit';
+    final response = await _send(
+      method: 'GET',
+      path: '${ApiConstants.health}/reminders/upcoming$query',
+    );
+    final decoded = jsonDecode(response.body);
+
+    if (decoded is List) {
+      return decoded
+          .whereType<Map<String, dynamic>>()
+          .map(NextHealthReminder.fromJson)
           .toList();
     }
 

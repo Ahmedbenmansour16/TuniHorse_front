@@ -1,73 +1,162 @@
 import 'package:flutter/material.dart';
-import 'package:tunihorse/core/data/mock_data.dart';
+import 'package:tunihorse/core/constants/app_colors.dart';
+import 'package:tunihorse/core/models/ui_models.dart';
 import 'package:tunihorse/core/widgets/app_page.dart';
 import 'package:tunihorse/core/widgets/ui_components.dart';
+import 'package:tunihorse/features/reports/data/workouts_api_client.dart';
 
-class AddTrainerCommentPage extends StatelessWidget {
-  const AddTrainerCommentPage({super.key});
+class AddTrainerCommentPage extends StatefulWidget {
+  final LiveSession session;
+
+  const AddTrainerCommentPage({super.key, required this.session});
+
+  @override
+  State<AddTrainerCommentPage> createState() => _AddTrainerCommentPageState();
+}
+
+class _AddTrainerCommentPageState extends State<AddTrainerCommentPage> {
+  final _workoutsApiClient = WorkoutsApiClient();
+  final _pointsFortsController = TextEditingController();
+  final _pointsAmeliorerController = TextEditingController();
+  final _commentController = TextEditingController();
+
+  int _note = 4;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final comment = widget.session.coachComment;
+    _note = comment?.note ?? 4;
+    _pointsFortsController.text = comment?.pointsForts ?? '';
+    _pointsAmeliorerController.text = comment?.pointsAmeliorer ?? '';
+    _commentController.text = comment?.commentaire ?? '';
+  }
+
+  @override
+  void dispose() {
+    _workoutsApiClient.close();
+    _pointsFortsController.dispose();
+    _pointsAmeliorerController.dispose();
+    _commentController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_commentController.text.trim().isEmpty) {
+      _showError('Le commentaire est obligatoire.');
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final updated = await _workoutsApiClient.updateCoachComment(
+        session: widget.session,
+        note: _note,
+        pointsForts: _pointsFortsController.text.trim(),
+        pointsAmeliorer: _pointsAmeliorerController.text.trim(),
+        commentaire: _commentController.text.trim(),
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Commentaire coach enregistre.')),
+      );
+      Navigator.of(context).pop(updated);
+    } on WorkoutsApiException catch (error) {
+      if (!mounted) return;
+      _showError(error.message);
+    } catch (_) {
+      if (!mounted) return;
+      _showError('Impossible d enregistrer le commentaire coach.');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppColors.danger),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final session = widget.session;
+
     return AppPage(
-      title: 'Ajouter commentaire',
+      title: 'Commentaire coach',
       showBack: true,
       children: [
         TuniCard(
           child: Row(
             children: [
-              HorsePhoto(horse: horses.first),
+              HorsePhoto(horse: session.horse),
               const SizedBox(width: 12),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Éclipse',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  Text(
-                    '18/05/2026 - 10:21',
-                    style: TextStyle(color: Color(0xFF777B72)),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      session.horse.name,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    Text(
+                      '${session.distance} - ${session.duration}',
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-        const SectionHeader('Note générale'),
+        const SectionHeader('Note generale'),
         Row(
           children: List.generate(
             5,
-            (index) => Icon(
-              index < 4 ? Icons.star : Icons.star_border,
-              color: const Color(0xFFDFAE68),
-              size: 32,
+            (index) => IconButton(
+              onPressed: () => setState(() => _note = index + 1),
+              icon: Icon(
+                index < _note ? Icons.star : Icons.star_border,
+                color: AppColors.gold,
+                size: 30,
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 14),
-        const TextField(
-          decoration: InputDecoration(
+        const SizedBox(height: 10),
+        TextField(
+          controller: _pointsFortsController,
+          decoration: const InputDecoration(
             labelText: 'Points forts',
-            hintText: 'Éclipse a bien géré les transitions.',
+            hintText: 'Bonne regularite au trot.',
           ),
         ),
         const SizedBox(height: 12),
-        const TextField(
-          decoration: InputDecoration(
-            labelText: 'Points à améliorer',
-            hintText: 'Travailler l’engagement du postérieur.',
+        TextField(
+          controller: _pointsAmeliorerController,
+          decoration: const InputDecoration(
+            labelText: 'Points a ameliorer',
+            hintText: 'Travailler la recuperation apres le galop.',
           ),
         ),
         const SizedBox(height: 12),
-        const TextField(
+        TextField(
+          controller: _commentController,
           minLines: 4,
           maxLines: 4,
-          decoration: InputDecoration(labelText: 'Commentaire'),
+          decoration: const InputDecoration(labelText: 'Commentaire'),
         ),
         const SizedBox(height: 22),
         PrimaryButton(
-          label: 'Enregistrer',
-          onPressed: () => Navigator.pop(context),
+          label: _isSaving ? 'Enregistrement...' : 'Enregistrer',
+          icon: Icons.save_outlined,
+          onPressed: _isSaving ? null : _save,
         ),
       ],
     );
